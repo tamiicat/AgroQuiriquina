@@ -1,0 +1,209 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#2e7d32">
+<link rel="manifest" href="/manifest.json"><title>AgroQuiriquina</title>
+<style>
+:root{--g:#2e7d32;--bg:#f4f6f0;--m:#667;--r:#c62828;--b:#d9dfd2}
+*{box-sizing:border-box}body{margin:0;font:18px/1.4 system-ui,sans-serif;background:var(--bg);color:#1d2a1d}
+header{position:sticky;top:0;z-index:5;background:var(--g);color:#fff;display:flex;align-items:center;gap:10px;padding:10px 14px}
+header h1{font-size:20px;margin:0;flex:1}#st{font-size:14px;padding:6px 12px;border-radius:99px;background:#0003;cursor:pointer}
+header button{background:none;border:0;color:#fff;font-size:22px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fff;border-top:2px solid var(--b);z-index:5}
+nav a{flex:1;text-align:center;padding:6px 1px;color:var(--m);text-decoration:none;font-size:11px}
+nav a b{display:block;font-size:24px}nav a.on{color:var(--g);font-weight:700;background:#e8f5e9}
+main{padding:14px 14px 96px;max-width:760px;margin:auto}
+@media(min-width:800px){nav{top:52px;right:auto;width:150px;flex-direction:column;border:0;border-right:2px solid var(--b)}
+nav a{flex:none;font-size:15px;padding:14px}nav a b{display:inline;margin-right:8px}main{margin-left:170px;padding-bottom:30px}}
+.card{background:#fff;border-radius:14px;padding:14px;margin:0 0 12px;box-shadow:0 1px 3px #0002}h2{margin:0 0 8px;font-size:20px}
+label{display:block;margin:10px 0 4px;font-weight:600}
+input,select{width:100%;padding:12px;font:inherit;border:2px solid var(--b);border-radius:10px;background:#fff}
+.btn{display:block;width:100%;margin:10px 0 0;padding:14px;font:inherit;font-weight:700;color:#fff;background:var(--g);border:0;border-radius:12px;text-align:center;text-decoration:none}
+.btn.sec{background:#fff;color:var(--g);border:2px solid var(--g)}.btn.red{background:var(--r)}.btn.sm{display:inline-block;width:auto;padding:8px 14px;margin:4px 4px 0 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid .btn{margin:0;padding:22px 8px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.li{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-bottom:1px solid var(--b)}.li:last-child{border:0}
+small{color:var(--m)}.bd{font-size:13px;padding:2px 8px;border-radius:99px;background:#fff3e0;color:#e65100;white-space:nowrap}
+.bd.ok{background:#e8f5e9;color:var(--g)}.bd.no{background:#ffebee;color:var(--r)}.tot{font-size:28px;font-weight:800}
+#toast{display:none;position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:12px 18px;border-radius:12px;z-index:9;max-width:90%}
+</style></head><body><div id="app"></div><div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(Number(n)||0);
+const ls={get(k,d){try{const v=localStorage.getItem('aq_'+k);return v?JSON.parse(v):d}catch(e){return d}},
+ set(k,v){try{localStorage.setItem('aq_'+k,JSON.stringify(v))}catch(e){toast('⚠ Almacenamiento lleno')}},del(k){try{localStorage.removeItem('aq_'+k)}catch(e){}}};
+const uuid=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=b[6]&15|64;b[8]=b[8]&63|128;const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');return`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`};
+const rutOk=r=>{r=r.replace(/[.\-\s]/g,'').toUpperCase();if(!/^\d{6,8}[\dK]$/.test(r))return false;let s=0,m=2;for(const d of r.slice(0,-1).split('').reverse()){s+=d*m;m=m==7?2:m+1}const x=11-s%11;return r.slice(-1)===(x==11?'0':x==10?'K':String(x))};
+const rutFmt=r=>{r=r.replace(/[.\-\s]/g,'').toUpperCase();return r.slice(0,-1)+'-'+r.slice(-1)};
+const S={tok:ls.get('tok'),me:ls.get('me'),cat:ls.get('cat',{clientes:[],productos:[],trabajadores:[]}),q:ls.get('q',{clientes:[],ventas:[],desempenos:[]}),
+ last:ls.get('last'),ventas:ls.get('ventas',[]),hist:ls.get('hist',[]),ins:ls.get('ins',[]),errs:ls.get('errs',{}),online:navigator.onLine};
+const save=()=>{['cat','q','ventas','hist','ins','errs'].forEach(k=>ls.set(k,S[k]));ls.set('last',S.last)};
+const pend=()=>S.q.clientes.length+S.q.ventas.length+S.q.desempenos.length;
+const MENU=[['inicio','🏠','Inicio'],['ventas','🧾','Ventas',['ADMIN','VENDEDOR']],['clientes','👥','Clientes',['ADMIN','VENDEDOR']],['inventario','📦','Bodega'],
+ ['terreno','🌱','Terreno',['ADMIN','SUPERVISOR']],['finanzas','💰','Finanzas',['ADMIN']],['nomina','👷','Nómina',['ADMIN']]];
+const can=id=>{const m=MENU.find(x=>x[0]===id);return m&&(!m[3]||m[3].includes(S.me.rol))};
+const main=h=>{$('main').innerHTML=h};
+const toast=t=>{const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',3500)};
+const opts=(a,f)=>a.map(x=>`<option value="${esc(x.id)}">${esc(f(x))}</option>`).join('');
+const cn=id=>(S.cat.clientes.find(c=>c.id===id)||{}).nombre||'Cliente';
+const tn=id=>(S.cat.trabajadores.find(c=>c.id===id)||{}).nombre||'Trabajador';
+const offMsg=e=>e.status?esc(e.message):'📴 Esta pantalla necesita conexión a internet.';
+const devId=()=>ls.get('dev')||(ls.set('dev',uuid().slice(0,8)),ls.get('dev'));
+const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+
+async function api(path,o={},retry=true){
+ const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),12000);
+ try{const r=await fetch('/api/v1'+path,{...o,signal:ac.signal,headers:{'Content-Type':'application/json',...(S.tok?{Authorization:'Bearer '+S.tok.access}:{})},body:o.body&&JSON.stringify(o.body)});
+  if(r.status===401&&retry&&S.tok?.refresh){const rr=await fetch('/api/v1/auth/token/refresh/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh:S.tok.refresh})});
+   if(rr.ok){S.tok.access=(await rr.json()).access;ls.set('tok',S.tok);return api(path,o,false)}logout(true);throw new Error('Sesión vencida')}
+  const d=await r.json().catch(()=>null);
+  if(!r.ok){const e=new Error(r.status===403?'Sin permiso para esto':d?JSON.stringify(d):'Error '+r.status);e.status=r.status;throw e}
+  return d}finally{clearTimeout(tm)}}
+
+async function sync(show){
+ if(S.busy||!S.tok)return;S.busy=1;stat();
+ try{
+  for(const k of['clientes','ventas','desempenos']){
+   const items=S.q[k].slice(0,500);if(!items.length)continue;
+   const d=await api(`/sync/${k}/bulk/`,{method:'POST',body:{[k]:items}});
+   const ok=new Set(d.resultados.filter(r=>r.status!=='error').map(r=>r.id));
+   d.resultados.filter(r=>r.status==='error').forEach(r=>{S.errs[r.id]=k+': '+Object.entries(r.errors||{}).map(([a,b])=>a+' '+JSON.stringify(b)).join('; ')});
+   ok.forEach(id=>delete S.errs[id]);S.q[k]=S.q[k].filter(i=>!ok.has(i.id))}
+  const c=await api('/sync/catalogo/');
+  for(const k of['clientes','productos','trabajadores'])if(c[k])S.cat[k]=k==='clientes'?[...c[k],...S.q.clientes.filter(q=>!c[k].some(x=>x.id===q.id))]:c[k];
+  S.last=Date.now();S.online=true;if(show)toast('✅ Sincronizado');
+ }catch(e){if(e.name==='TypeError'||e.name==='AbortError'){S.online=false;if(show)toast('📴 Sin conexión: se enviará más tarde')}else if(show)toast('⚠ '+e.message)}
+ finally{S.busy=0;save();stat();if(['inicio','ventas','inventario'].includes(route()))go()}}
+
+const route=()=>location.hash.slice(2)||'inicio';
+const stat=()=>{const e=$('#st');if(e)e.textContent=`${S.busy?'⏳':S.online?'🟢':'🔴'} ${pend()?pend()+' pendiente(s)':S.online?'En línea':'Sin conexión'}`};
+function logout(force){if(!force&&pend()&&!confirm('Hay datos sin enviar. Se conservarán en este teléfono. ¿Cerrar sesión?'))return;
+ ls.del('tok');ls.del('me');S.tok=S.me=null;location.hash='';login()}
+
+function login(msg){
+ $('#app').innerHTML=`<main style="margin:0 auto;padding-top:40px"><div class="card"><h2>🥔 AgroQuiriquina</h2><p>Ingresa con tu usuario</p>
+ <label>Usuario</label><input id="u" autocapitalize="none" autocomplete="username"><label>Clave</label><input id="p" type="password" autocomplete="current-password">
+ <button class="btn" id="go">Entrar</button><p id="em" style="color:#c62828">${esc(msg||'')}</p></div></main>`;
+ $('#go').onclick=async()=>{try{
+  const r=await fetch('/api/v1/auth/token/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#u').value.trim(),password:$('#p').value})});
+  if(!r.ok)throw new Error(r.status===401?'Usuario o clave incorrectos':'Error '+r.status);
+  S.tok=await r.json();ls.set('tok',S.tok);S.me=await api('/me/');ls.set('me',S.me);start()}catch(e){$('#em').textContent=e.name==='TypeError'?'📴 Necesitas conexión para entrar la primera vez':e.message}}}
+
+function start(){
+ $('#app').innerHTML=`<header><h1>🥔 AgroQuiriquina</h1><span id="st" data-a="sync"></span><button data-a="logout" title="Salir">⎋</button></header>
+ <nav>${MENU.filter(m=>can(m[0])).map(m=>`<a href="#/${m[0]}" data-n="${m[0]}"><b>${m[1]}</b>${m[2]}</a>`).join('')}</nav><main></main>`;
+ stat();go();sync(false)}
+
+function go(){const r=route(),v=V[r]||V.inicio,id=r==='nueva-venta'?'ventas':r;
+ document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.n===id));
+ if(r!=='inicio'&&!can(id)){location.hash='#/inicio';return}v()}
+
+const A={sync:()=>sync(true),logout:()=>logout(),
+ rm:d=>{L.splice(d.i,1);lines()},
+ desc:()=>{Object.keys(S.errs).forEach(id=>['clientes','ventas','desempenos'].forEach(k=>S.q[k]=S.q[k].filter(i=>i.id!==id)));S.errs={};save();stat();go()},
+ rem:async d=>{try{await api(`/remuneraciones/${d.id}/${d.op}/`,{method:'POST'});V.nomina()}catch(e){toast(e.message)}}};
+document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t)A[t.dataset.a]?.(t.dataset)});
+addEventListener('hashchange',()=>S.me&&go());
+addEventListener('online',()=>{S.online=true;stat();sync(false)});addEventListener('offline',()=>{S.online=false;stat()});
+setInterval(()=>{if(S.tok&&pend()&&navigator.onLine)sync(false)},60000);
+
+const V={};
+V.inicio=()=>{const b=(h,t)=>`<a class="btn" href="#/${h}">${t}</a>`,n=Object.keys(S.errs).length;
+ main(`<div class="card"><h2>Hola, ${esc(S.me.nombre)} 👋</h2><p>${S.online?'🟢 Con conexión':'🔴 Sin conexión: todo se guarda en el teléfono'}</p>
+ <p>Pendientes de enviar: <b>${pend()}</b><br><small>Última sincronización: ${S.last?new Date(S.last).toLocaleString('es-CL'):'nunca'}</small></p>
+ <button class="btn" data-a="sync">🔄 Sincronizar ahora</button></div>
+ ${n?`<div class="card"><h2>⚠ ${n} registro(s) con error</h2>${Object.values(S.errs).slice(0,3).map(e=>`<p><small>${esc(e)}</small></p>`).join('')}<button class="btn red" data-a="desc">Descartar los que tienen error</button></div>`:''}
+ <div class="grid">${can('ventas')?b('nueva-venta','➕ Nueva venta'):''}${can('terreno')?b('terreno','🌱 Registrar trabajo'):''}${can('inventario')?b('inventario','📦 Ver stock'):''}${can('clientes')?b('clientes','👥 Clientes'):''}${can('finanzas')?b('finanzas','💰 Por cobrar'):''}${can('nomina')?b('nomina','👷 Nómina'):''}</div>`)};
+
+V.ventas=()=>{
+ const tot=v=>v.detalles.reduce((s,d)=>s+d.cantidad*d.precio_unitario,0);
+ main(`<a class="btn" href="#/nueva-venta">➕ Nueva venta</a><div class="card" style="margin-top:12px"><h2>Ventas</h2>
+ ${S.q.ventas.slice().reverse().map(v=>`<div class="li"><span>${esc(cn(v.cliente))}<br><small>${new Date(v.fecha).toLocaleString('es-CL')}</small></span><span style="text-align:right"><b>${money(tot(v))}</b><br><span class="bd">⏳ por enviar</span></span></div>`).join('')}
+ ${S.ventas.map(v=>`<div class="li"><span>${esc(cn(v.cliente))}<br><small>${new Date(v.fecha).toLocaleString('es-CL')}</small></span><span style="text-align:right"><b>${money(v.total)}</b><br>
+ <span class="bd ${v.estado_pago==='PAGADO'?'ok':v.estado==='ANULADA'?'no':''}">${v.estado==='ANULADA'?'Anulada':v.estado_pago==='PAGADO'?'Pagada':v.estado_pago==='PARCIAL'?'Abono':'Por cobrar'}</span>${v.requiere_revision?' <span class="bd no">revisar stock</span>':''}</span></div>`).join('')||(S.q.ventas.length?'':'<p>Aún no hay ventas.</p>')}</div>`);
+ if(S.online&&route()==='ventas'&&!S.busy)api('/ventas/?limit=40').then(d=>{S.ventas=d.results;save();if(route()==='ventas'&&!V.l)V.l=1,V.ventas(),V.l=0}).catch(()=>{})};
+
+let L=[];
+const lines=()=>{const t=L.reduce((s,l)=>s+l.cantidad*l.precio_unitario,0);
+ $('#lines').innerHTML=L.length?L.map((l,i)=>`<div class="li"><span>${esc(l.nombre)}<br><small>${l.cantidad} × ${money(l.precio_unitario)}</small></span><span><b>${money(l.cantidad*l.precio_unitario)}</b> <button class="btn sm red" data-a="rm" data-i="${i}">✖</button></span></div>`).join('')+`<p class="tot">Total: ${money(t)}</p>`:'<small>Agrega al menos un producto</small>'};
+V['nueva-venta']=()=>{L=[];const P=S.cat.productos,C=S.cat.clientes;
+ main(`<div class="card"><h2>Nueva venta</h2><label>Cliente</label><select id="cl">${opts(C,c=>c.nombre)}</select><small><a href="#/clientes">¿Cliente nuevo? Créalo aquí</a></small>
+ <label>Producto</label><select id="pr">${opts(P,p=>`${p.nombre} (${Number(p.cantidad_disponible)} ${p.unidad_medida})`)}</select>
+ <div class="row"><div><label>Cantidad</label><input id="qt" type="number" inputmode="decimal" min="0" step="any"></div><div><label>Precio c/u</label><input id="pu" type="number" inputmode="numeric"></div></div>
+ <button class="btn sec" id="add">➕ Agregar producto</button></div>
+ <div class="card" id="lines"></div>
+ <div class="card"><label>Forma de pago</label><select id="pg"><option value="P">Pagado ahora</option><option value="C">A crédito (queda por cobrar)</option></select>
+ <div id="cr" hidden><label>Vence el</label><input id="ven" type="date"></div>
+ <label><input id="dp" type="checkbox" style="width:auto"> Programar despacho</label>
+ <div id="dpx" hidden><label>Fecha</label><input id="df" type="date" value="${today()}"><label>Dirección</label><input id="dd"><label>Comuna</label><input id="dc"></div></div>
+ <button class="btn" id="ok">✅ Guardar venta</button>`);
+ const setP=()=>{const p=P.find(x=>x.id===$('#pr').value);$('#pu').value=p?Math.round(p.precio_referencia):''};setP();lines();
+ $('#pr').onchange=setP;$('#pg').onchange=e=>$('#cr').hidden=e.target.value!=='C';$('#dp').onchange=e=>$('#dpx').hidden=!e.target.checked;
+ $('#add').onclick=()=>{const p=P.find(x=>x.id===$('#pr').value),q=parseFloat($('#qt').value),pu=parseFloat($('#pu').value);
+  if(!p||!(q>0)||!(pu>=0))return toast('Indica producto, cantidad y precio');L.push({producto:p.id,nombre:p.nombre,cantidad:q,precio_unitario:pu});$('#qt').value='';lines()};
+ $('#ok').onclick=()=>{const cl=$('#cl').value;if(!cl)return toast('Elige un cliente');if(!L.length)return toast('Agrega productos');
+  const t=Math.round(L.reduce((s,l)=>s+l.cantidad*l.precio_unitario,0)),cred=$('#pg').value==='C';
+  if($('#dp').checked&&!$('#dd').value.trim())return toast('Indica la dirección de despacho');
+  const v={id:uuid(),cliente:cl,fecha:new Date().toISOString(),device_id:devId(),
+   detalles:L.map(l=>({id:uuid(),producto:l.producto,cantidad:String(l.cantidad),precio_unitario:Math.round(l.precio_unitario)})),
+   pagos:[cred?{id:uuid(),monto:t,estado:'PENDIENTE',metodo:'CREDITO',fecha_vencimiento:$('#ven').value||undefined}:{id:uuid(),monto:t,estado:'PAGADO',metodo:'EFECTIVO'}]};
+  if($('#dp').checked)v.despacho={id:uuid(),fecha:$('#df').value,direccion:$('#dd').value.trim(),comuna:$('#dc').value.trim()};
+  S.q.ventas.push(v);L.forEach(l=>{const p=P.find(x=>x.id===l.producto);if(p)p.cantidad_disponible=String(Math.max(0,Number(p.cantidad_disponible)-l.cantidad))});
+  save();stat();toast('✅ Venta guardada'+(S.online?'':' (se enviará al tener conexión)'));location.hash='#/ventas';sync(false)}};
+
+V.clientes=()=>{
+ const draw=f=>{$('#cls').innerHTML=S.cat.clientes.filter(c=>(c.nombre+c.rut).toLowerCase().includes(f.toLowerCase())).map(c=>`<div class="li"><span>${esc(c.nombre)}<br><small>${esc(c.rut)} ${esc(c.telefono||'')}</small></span>${S.q.clientes.some(q=>q.id===c.id)?'<span class="bd">⏳ por enviar</span>':''}</div>`).join('')||'<small>Sin resultados</small>'};
+ main(`<details class="card"><summary><b>➕ Nuevo cliente</b></summary><label>Nombre</label><input id="n"><label>RUT</label><input id="r" placeholder="12.345.678-5"><label>Teléfono</label><input id="t" type="tel"><label>Comuna</label><input id="c">
+ <button class="btn" id="ok">Guardar cliente</button></details>
+ <div class="card"><h2>Clientes</h2><input id="f" placeholder="🔍 Buscar por nombre o RUT"><div id="cls"></div></div>`);draw('');
+ $('#f').oninput=e=>draw(e.target.value);
+ $('#ok').onclick=()=>{const n=$('#n').value.trim(),r=$('#r').value;if(!n)return toast('Falta el nombre');if(!rutOk(r))return toast('RUT inválido, revísalo');
+  const c={id:uuid(),rut:rutFmt(r),nombre:n,telefono:$('#t').value.trim(),comuna:$('#c').value.trim()};
+  S.q.clientes.push(c);S.cat.clientes.push(c);save();stat();toast('✅ Cliente guardado');V.clientes();sync(false)}};
+
+V.inventario=()=>{
+ const low=p=>Number(p.cantidad_disponible)<=Number(p.stock_minimo),ci=can('terreno');
+ main(`<div class="card"><h2>Stock de productos</h2>${S.cat.productos.map(p=>`<div class="li"><span>${esc(p.nombre)}</span><span><b>${Number(p.cantidad_disponible)}</b> ${esc(p.unidad_medida)} ${low(p)?'<span class="bd no">⚠ bajo</span>':''}</span></div>`).join('')||'<small>Sin datos. Sincroniza con conexión.</small>'}</div>
+ ${ci?`<div class="card"><h2>Insumos por hectárea</h2><label>Insumo</label><select id="in">${opts(S.ins,i=>`${i.nombre} (${Number(i.cantidad_disponible)} ${i.unidad_medida})`)}</select>
+ <label>Hectáreas</label><input id="ha" type="number" inputmode="decimal" step="any"><button class="btn" id="calc">Calcular</button><p id="res"></p></div>`:''}`);
+ if(ci){$('#calc').onclick=()=>{const i=S.ins.find(x=>x.id===$('#in').value),h=parseFloat($('#ha').value);if(!i||!(h>0))return toast('Elige insumo e indica hectáreas');
+  const need=i.dosis_por_hectarea*h,have=Number(i.cantidad_disponible);
+  $('#res').innerHTML=`Necesitas <b>${need.toFixed(1)} ${esc(i.unidad_medida)}</b>. Tienes ${have}.<br>${have>=need?'✅ Alcanza':'❌ Faltan <b>'+(need-have).toFixed(1)+'</b>'}`}}
+ if(S.online&&!S.busy&&!V.l){V.l=1;Promise.all([api('/productos/?limit=500').then(d=>S.cat.productos=d.results),ci?api('/insumos/?limit=200').then(d=>S.ins=d.results):0])
+  .then(()=>{save();V.l=0;if(route()==='inventario')V.inventario();V.l=1;setTimeout(()=>V.l=0,5000)}).catch(()=>V.l=0)}};
+
+const T={COSECHA_PAPA:['Cosecha de papa','SACO'],ENSACADO:['Ensacado','SACO'],SIEMBRA:['Siembra','JORNADA'],CARGA:['Carga / estiba','SACO'],JORNAL:['Jornal diario','JORNADA'],OTRA:['Otra labor','JORNADA']};
+V.terreno=()=>{
+ main(`<div class="card"><h2>Registrar trabajo del día</h2><label>Trabajador</label><select id="tr">${opts(S.cat.trabajadores,t=>t.nombre)}</select>
+ <label>Labor</label><select id="lb">${Object.entries(T).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join('')}</select>
+ <div class="row"><div><label>Cantidad</label><input id="ct" type="number" inputmode="decimal" step="any"></div><div><label>Unidad</label><select id="un"><option value="SACO">Sacos</option><option value="KG">Kilos</option><option value="JORNADA">Jornadas</option></select></div></div>
+ <label>Pago por unidad ($)</label><input id="tf" type="number" inputmode="numeric" placeholder="Vacío = tarifa diaria del trabajador"><label>Fecha</label><input id="fe" type="date" value="${today()}">
+ <button class="btn" id="ok">✅ Guardar registro</button></div>
+ <div class="card"><h2>Últimos registros</h2>${S.hist.map(h=>`<div class="li"><span>${esc(h.n)}<br><small>${esc(h.l)} · ${h.c} ${esc(h.u)} · ${h.f}</small></span>${S.q.desempenos.some(q=>q.id===h.id)?'<span class="bd">⏳ por enviar</span>':'<span class="bd ok">✔</span>'}</div>`).join('')||'<small>Sin registros</small>'}</div>`);
+ $('#lb').onchange=e=>$('#un').value=T[e.target.value][1];$('#un').value=T.COSECHA_PAPA[1];
+ $('#ok').onclick=()=>{const tr=$('#tr').value,c=parseFloat($('#ct').value);if(!tr)return toast('Elige un trabajador');if(!(c>0))return toast('Indica la cantidad');
+  const d={id:uuid(),trabajador:tr,fecha:$('#fe').value,labor:$('#lb').value,cantidad:String(c),unidad:$('#un').value,device_id:devId()};
+  if($('#tf').value)d.tarifa_unitaria=String(parseFloat($('#tf').value));
+  S.q.desempenos.push(d);S.hist=[{id:d.id,n:tn(tr),l:T[d.labor][0],c,u:d.unidad,f:d.fecha},...S.hist].slice(0,15);save();stat();
+  toast('✅ Registro guardado');V.terreno();sync(false)}};
+
+V.finanzas=async()=>{main('<div class="card">Cargando…</div>');
+ try{const[a,b]=await Promise.all([api('/finanzas/cuentas-por-cobrar/'),api('/finanzas/rentabilidad/')]);
+  main(`<div class="card"><h2>Resumen del mes</h2><div class="li"><span>Ventas</span><b>${money(b.ventas_totales)}</b></div><div class="li"><span>Cobrado</span><b>${money(b.cobrado)}</b></div>
+  <div class="li"><span>Por cobrar</span><b>${money(b.por_cobrar)}</b></div><div class="li"><span>Nómina</span><b>${money(b.costo_nomina)}</b></div><div class="li"><span>Margen estimado</span><b>${money(b.margen_estimado)}</b></div><small>${esc(b.nota)}</small></div>
+  <div class="card"><h2>Cuentas por cobrar: ${money(a.total_por_cobrar)}</h2>${a.clientes.map(c=>`<div class="li"><span>${esc(c.nombre)}<br><small>${c.ventas} venta(s)</small></span><b>${money(c.deuda)}</b></div>`).join('')||'<p>Nadie te debe 🎉</p>'}</div>`)
+ }catch(e){main(`<div class="card">${offMsg(e)}</div>`)}};
+
+V.nomina=async()=>{main('<div class="card">Cargando…</div>');
+ try{const d=await api('/remuneraciones/?limit=30'),mes=today().slice(0,8);
+  main(`<details class="card"><summary><b>➕ Calcular pago de un trabajador</b></summary><label>Trabajador</label><select id="tr">${opts(S.cat.trabajadores,t=>t.nombre)}</select>
+  <div class="row"><div><label>Desde</label><input id="d1" type="date" value="${mes}01"></div><div><label>Hasta</label><input id="d2" type="date" value="${today()}"></div></div>
+  <div class="row"><div><label>Bonos ($)</label><input id="bo" type="number" value="0"></div><div><label>Descuentos ($)</label><input id="de" type="number" value="0"></div></div>
+  <button class="btn" id="ok">Calcular</button></details>
+  <div class="card"><h2>Remuneraciones</h2>${d.results.map(r=>`<div class="li"><span>${esc(tn(r.trabajador))}<br><small>${r.periodo_inicio} → ${r.periodo_fin}</small><br>
+  ${r.estado==='BORRADOR'?`<button class="btn sm" data-a="rem" data-id="${r.id}" data-op="aprobar">Aprobar</button>`:r.estado==='APROBADA'?`<button class="btn sm" data-a="rem" data-id="${r.id}" data-op="pagar">Marcar pagada</button>`:''}</span>
+  <span style="text-align:right"><b>${money(r.total_liquido)}</b><br><span class="bd ${r.estado==='PAGADA'?'ok':''}">${esc(r.estado)}</span></span></div>`).join('')||'<small>Aún no hay remuneraciones</small>'}</div>`);
+  $('#ok').onclick=async()=>{try{await api('/remuneraciones/',{method:'POST',body:{trabajador:$('#tr').value,periodo_inicio:$('#d1').value,periodo_fin:$('#d2').value,bonos:+$('#bo').value||0,descuentos:+$('#de').value||0}});toast('✅ Calculado');V.nomina()}catch(e){toast(e.message)}}
+ }catch(e){main(`<div class="card">${offMsg(e)}</div>`)}};
+
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+S.tok&&S.me?start():login();
+</script></body></html>
