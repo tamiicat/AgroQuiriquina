@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0f8b7d">
   <link rel="manifest" href="/static/manifest.json">
+  <link rel="icon" type="image/png" href="/static/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
   <title>AgroQuiriquina</title>
@@ -67,16 +69,16 @@ function logout(force){if(!force&&pend()&&!confirm('Hay datos sin enviar. Se con
   ls.del('tok');ls.del('me');S.tok=S.me=null;location.hash='';login()}
 
 function login(msg){
-  $('#app').innerHTML=`<main class="lg"><div class="card"><h2><i class="bi bi-basket2-fill"></i> AgroQuiriquina</h2><p>Ingresa con tu usuario</p>
-  <label>Usuario</label><input id="u" autocapitalize="none" autocomplete="username"><label>Clave</label><input id="p" type="password" autocomplete="current-password">
-  <button class="btn" id="go">Entrar</button><p id="em" style="color:#c62828">${msg?esc(msg):''}</p></div></main>`;
+  $('#app').innerHTML=`<main class="lg"><div class="card"><img src="/static/icons/logo.png" alt="AgroQuiriquina" style="display:block;width:100%;max-width:220px;height:auto;margin:0 auto 16px"><h2 style="margin:0 0 4px;text-align:center">Ingresar a mi Cuenta</h2>
+  <label>Usuario</label><input id="u" autocapitalize="none" autocomplete="username"><label>Contraseña</label><input id="p" type="password" autocomplete="current-password">
+  <button class="btn" id="go">Iniciar Sesión</button><p id="em" style="color:#c62828">${msg?esc(msg):''}</p></div></main>`;
   $('#go').onclick=async()=>{try{
   const r=await fetch('/api/v1/auth/token/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#u').value.trim(),password:$('#p').value})});
   if(!r.ok)throw new Error(r.status===401?'Usuario o clave incorrectos':'Error '+r.status);
   S.tok=await r.json();ls.set('tok',S.tok);S.me=await api('/me/');ls.set('me',S.me);start()}catch(e){$('#em').innerHTML=e.name==='TypeError'?'<i class="bi bi-wifi-off"></i> Necesitas conexión para entrar la primera vez':esc(e.message)}}}
 
 function start(){
-  $('#app').innerHTML=`<div class="shell"><aside class="side"><div class="brand"><i class="bi bi-basket2-fill"></i> AgroQuiriquina</div><nav>${MENU.filter(m=>can(m[0])).map(m=>`<a href="#/${m[0]}" data-n="${m[0]}"><b>${m[1]}</b><span>${m[2]}</span></a>`).join('')}</nav></aside>
+  $('#app').innerHTML=`<div class="shell"><aside class="side"><div class="brand"><img src="/static/icons/logo.png" alt="" style="height:28px;vertical-align:middle"> AgroQuiriquina</div><nav>${MENU.filter(m=>can(m[0])).map(m=>`<a href="#/${m[0]}" data-n="${m[0]}"><b>${m[1]}</b><span>${m[2]}</span></a>`).join('')}</nav></aside>
   <div class="cont"><header class="top"><div id="crumb"></div><span id="st" data-a="sync" role="button" tabindex="0"></span><button class="btn sm sec" data-a="logout" style="margin:0">Salir</button></header><main></main></div></div>`;
   stat();go();sync(false)}
 
